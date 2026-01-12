@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Flask
 opencv-python
 numpy
@@ -5,3 +6,12 @@ tensorflow
 keras
 gunicorn
 pandas
+=======
+Flask
+opencv-python
+numpy
+tensorflow
+keras
+gunicorn
+pandas
+>>>>>>> f5d4c682b714e271bf4ce344462453bde8ac64ce

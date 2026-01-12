@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "angry": 0,
   "disgusted": 1,
@@ -7,3 +8,14 @@
   "sad": 5,
   "surprised": 6
 }
+=======
+{
+  "angry": 0,
+  "disgusted": 1,
+  "fearful": 2,
+  "happy": 3,
+  "neutral": 4,
+  "sad": 5,
+  "surprised": 6
+}
+>>>>>>> f5d4c682b714e271bf4ce344462453bde8ac64ce
