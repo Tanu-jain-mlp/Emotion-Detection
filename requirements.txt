@@ -1,7 +1,7 @@
+gunicorn
 flask
 opencv-python
 numpy
 tensorflow
 keras
 Pillow
-
