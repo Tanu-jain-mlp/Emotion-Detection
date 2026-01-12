@@ -150,5 +150,7 @@ def view_log():
     return render_template('view_log.html', logs=emotion_history)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    import os
+port = int(os.environ.get("PORT", 10000))
+app.run(host="0.0.0.0", port=port)
 >>>>>>> f5d4c682b714e271bf4ce344462453bde8ac64ce
