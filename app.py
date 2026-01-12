@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from flask import Flask, render_template, request
 import numpy as np
 from PIL import Image
@@ -72,7 +71,6 @@ def view_log():
 
 if __name__ == "__main__":
     app.run(debug=True)
-=======
 from flask import Flask, render_template, request
 import numpy as np
 from PIL import Image
@@ -153,4 +151,3 @@ if __name__ == "__main__":
     import os
 port = int(os.environ.get("PORT", 10000))
 app.run(host="0.0.0.0", port=port)
->>>>>>> f5d4c682b714e271bf4ce344462453bde8ac64ce
