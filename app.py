@@ -1,26 +1,26 @@
 import os
+# 1. CRITICAL: Force CPU and optimize memory before importing heavy libraries
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
+
+# 2. CRITICAL: Prevent Infinite Buffering / Thread Deadlocks on Render
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
 from flask import Flask, render_template, request
 import numpy as np
 from PIL import Image
 import cv2
-import tensorflow as tf
+from keras.models import load_model
+from keras import backend as K  # Frees RAM after prediction
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Initialize the lightweight TFLite Interpreter safely
-# Ensure emotion_model.tflite is uploaded to your main GitHub folder!
-MODEL_PATH = "emotion_model.tflite"
-
-interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
-interpreter.allocate_tensors()
-
-# Map the internal input/output tensor arrays
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# Load your existing original model from your repository
+model = load_model("emotion_model.h5")
 
 emotion_labels = {
     0: 'Angry', 1: 'Disgust', 2: 'Fear', 3: 'Happy', 
@@ -30,18 +30,15 @@ emotion_labels = {
 emotion_history = []
 
 def prepare_image(img, target_size=(48, 48)):
-    # Convert PIL Image to numpy array grayscale
     if isinstance(img, Image.Image):
         img = img.convert('L')
         img = img.resize(target_size)
         img = np.array(img)
-    # Convert OpenCV image matrix array to grayscale securely
     elif isinstance(img, np.ndarray):
         if len(img.shape) == 3 and img.shape[2] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = cv2.resize(img, target_size)
     
-    # Process normalization and shape conversion for BOTH types
     img = img.astype("float32") / 255.0
     img = np.expand_dims(img, axis=-1)
     img = np.expand_dims(img, axis=0)
@@ -61,23 +58,22 @@ def upload():
             img = Image.open(file)
             img = prepare_image(img)
             
-            # Tiny structural tensor computation to save server memory
-            interpreter.set_tensor(input_details[0]['index'], img)
-            interpreter.invoke()
-            prediction = interpreter.get_tensor(output_details[0]['index'])[0]
-            
+            # Safe prediction
+            prediction = model.predict(img, verbose=0)
             label = emotion_labels[np.argmax(prediction)]
+            
+            # Immediately clear tracking memory so RAM doesn't overflow
+            K.clear_session()
             
             username = request.form.get('username', 'Unknown')
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             emotion_history.append({
-                'username': username,
-                'emotion': label,
-                'timestamp': timestamp
+                'username': username, 'emotion': label, 'timestamp': timestamp
             })
             return f"Predicted Emotion: {label}"
         except Exception as e:
+            K.clear_session()
             return f"Error: {str(e)}"
     return render_template('upload.html')
 
@@ -94,23 +90,20 @@ def webcam():
         img = Image.open(file)
         img = prepare_image(img)
         
-        # Tiny structural tensor computation to save server memory
-        interpreter.set_tensor(input_details[0]['index'], img)
-        interpreter.invoke()
-        prediction = interpreter.get_tensor(output_details[0]['index'])[0]
-        
+        prediction = model.predict(img, verbose=0)
         label = emotion_labels[np.argmax(prediction)]
+        
+        K.clear_session()
         
         username = request.form.get('username', 'Unknown')
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         emotion_history.append({
-            'username': username,
-            'emotion': label,
-            'timestamp': timestamp
+            'username': username, 'emotion': label, 'timestamp': timestamp
         })
         return f"Predicted Emotion: {label}"
     except Exception as e:
+        K.clear_session()
         return f"Error: {str(e)}"
 
 @app.route('/view_log')
