@@ -1,25 +1,21 @@
 import os
-# 1. CRITICAL: Force CPU and optimize memory before importing heavy libraries
+# Force CPU environment parameters instantly
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"
-
-# 2. CRITICAL: Prevent Infinite Buffering / Thread Deadlocks on Render
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
-os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
 from flask import Flask, render_template, request
 import numpy as np
 from PIL import Image
 import cv2
+import tensorflow as tf
 from keras.models import load_model
-from keras import backend as K  # Frees RAM after prediction
+from keras import backend as K
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Load your existing original model from your repository
+# Load original model safely
 model = load_model("emotion_model.h5")
 
 emotion_labels = {
@@ -58,11 +54,13 @@ def upload():
             img = Image.open(file)
             img = prepare_image(img)
             
-            # Safe prediction
-            prediction = model.predict(img, verbose=0)
+            # Convert raw numpy array array to strict input tensor data type
+            tensor_img = tf.convert_to_tensor(img, dtype=tf.float32)
+            
+            # CRITICAL: Call the model as a direct function to prevent buffering deadlocks
+            prediction = model(tensor_img, training=False).numpy()[0]
             label = emotion_labels[np.argmax(prediction)]
             
-            # Immediately clear tracking memory so RAM doesn't overflow
             K.clear_session()
             
             username = request.form.get('username', 'Unknown')
@@ -74,7 +72,7 @@ def upload():
             return f"Predicted Emotion: {label}"
         except Exception as e:
             K.clear_session()
-            return f"Error: {str(e)}"
+            return f"Error during processing: {str(e)}"
     return render_template('upload.html')
 
 @app.route('/webcam_page')
@@ -90,7 +88,11 @@ def webcam():
         img = Image.open(file)
         img = prepare_image(img)
         
-        prediction = model.predict(img, verbose=0)
+        # Convert raw numpy array to tensor
+        tensor_img = tf.convert_to_tensor(img, dtype=tf.float32)
+        
+        # CRITICAL: Run direct function call to bypass predict locks
+        prediction = model(tensor_img, training=False).numpy()[0]
         label = emotion_labels[np.argmax(prediction)]
         
         K.clear_session()
@@ -104,7 +106,7 @@ def webcam():
         return f"Predicted Emotion: {label}"
     except Exception as e:
         K.clear_session()
-        return f"Error: {str(e)}"
+        return f"Error during processing: {str(e)}"
 
 @app.route('/view_log')
 def view_log():
