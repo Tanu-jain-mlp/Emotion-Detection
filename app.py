@@ -1,12 +1,15 @@
 import os
+# Force CPU and optimize TensorFlow memory limits before importing heavy libraries
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"  # Forces Linux to release RAM quicker
 
 from flask import Flask, render_template, request
 import numpy as np
 from PIL import Image
 import cv2
 from keras.models import load_model
+from keras import backend as K  # Used to clear RAM after prediction
 from datetime import datetime
 
 app = Flask(__name__)
@@ -33,7 +36,7 @@ def prepare_image(img, target_size=(48, 48)):
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = cv2.resize(img, target_size)
     
-    # These lines must run for BOTH image types
+    # Run formatting for all inputs securely
     img = img.astype("float32") / 255.0
     img = np.expand_dims(img, axis=-1)
     img = np.expand_dims(img, axis=0)
@@ -53,8 +56,12 @@ def upload():
             img = Image.open(file)
             img = prepare_image(img)
             
+            # Predict and immediately strip batch nesting
             prediction = model.predict(img, verbose=0)[0]
             label = emotion_labels[np.argmax(prediction)]
+            
+            # CRITICAL: Clear Keras tracking memory so RAM doesn't overflow
+            K.clear_session()
             
             username = request.form.get('username', 'Unknown')
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -66,6 +73,7 @@ def upload():
             })
             return f"Predicted Emotion: {label}"
         except Exception as e:
+            K.clear_session()  # Clear memory even if it fails
             return f"Error: {str(e)}"
     return render_template('upload.html')
 
@@ -82,8 +90,12 @@ def webcam():
         img = Image.open(file)
         img = prepare_image(img)
         
+        # Predict and immediately strip batch nesting
         prediction = model.predict(img, verbose=0)[0]
         label = emotion_labels[np.argmax(prediction)]
+        
+        # CRITICAL: Clear Keras tracking memory so RAM doesn't overflow
+        K.clear_session()
         
         username = request.form.get('username', 'Unknown')
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -95,6 +107,7 @@ def webcam():
         })
         return f"Predicted Emotion: {label}"
     except Exception as e:
+        K.clear_session()  # Clear memory even if it fails
         return f"Error: {str(e)}"
 
 @app.route('/view_log')
