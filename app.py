@@ -1,21 +1,26 @@
 import os
-# Force CPU and optimize TensorFlow memory limits before importing heavy libraries
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536"  # Forces Linux to release RAM quicker
 
 from flask import Flask, render_template, request
 import numpy as np
 from PIL import Image
 import cv2
-from keras.models import load_model
-from keras import backend as K  # Used to clear RAM after prediction
+import tensorflow as tf
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Load model only once
-model = load_model("emotion_model.h5")
+# Initialize the lightweight TFLite Interpreter safely
+# Ensure emotion_model.tflite is uploaded to your main GitHub folder!
+MODEL_PATH = "emotion_model.tflite"
+
+interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter.allocate_tensors()
+
+# Map the internal input/output tensor arrays
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
 emotion_labels = {
     0: 'Angry', 1: 'Disgust', 2: 'Fear', 3: 'Happy', 
@@ -30,13 +35,13 @@ def prepare_image(img, target_size=(48, 48)):
         img = img.convert('L')
         img = img.resize(target_size)
         img = np.array(img)
-    # Convert OpenCV image to grayscale
+    # Convert OpenCV image matrix array to grayscale securely
     elif isinstance(img, np.ndarray):
         if len(img.shape) == 3 and img.shape[2] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = cv2.resize(img, target_size)
     
-    # Run formatting for all inputs securely
+    # Process normalization and shape conversion for BOTH types
     img = img.astype("float32") / 255.0
     img = np.expand_dims(img, axis=-1)
     img = np.expand_dims(img, axis=0)
@@ -56,12 +61,12 @@ def upload():
             img = Image.open(file)
             img = prepare_image(img)
             
-            # Predict and immediately strip batch nesting
-            prediction = model.predict(img, verbose=0)[0]
-            label = emotion_labels[np.argmax(prediction)]
+            # Tiny structural tensor computation to save server memory
+            interpreter.set_tensor(input_details[0]['index'], img)
+            interpreter.invoke()
+            prediction = interpreter.get_tensor(output_details[0]['index'])[0]
             
-            # CRITICAL: Clear Keras tracking memory so RAM doesn't overflow
-            K.clear_session()
+            label = emotion_labels[np.argmax(prediction)]
             
             username = request.form.get('username', 'Unknown')
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -73,7 +78,6 @@ def upload():
             })
             return f"Predicted Emotion: {label}"
         except Exception as e:
-            K.clear_session()  # Clear memory even if it fails
             return f"Error: {str(e)}"
     return render_template('upload.html')
 
@@ -90,12 +94,12 @@ def webcam():
         img = Image.open(file)
         img = prepare_image(img)
         
-        # Predict and immediately strip batch nesting
-        prediction = model.predict(img, verbose=0)[0]
-        label = emotion_labels[np.argmax(prediction)]
+        # Tiny structural tensor computation to save server memory
+        interpreter.set_tensor(input_details[0]['index'], img)
+        interpreter.invoke()
+        prediction = interpreter.get_tensor(output_details[0]['index'])[0]
         
-        # CRITICAL: Clear Keras tracking memory so RAM doesn't overflow
-        K.clear_session()
+        label = emotion_labels[np.argmax(prediction)]
         
         username = request.form.get('username', 'Unknown')
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -107,7 +111,6 @@ def webcam():
         })
         return f"Predicted Emotion: {label}"
     except Exception as e:
-        K.clear_session()  # Clear memory even if it fails
         return f"Error: {str(e)}"
 
 @app.route('/view_log')
